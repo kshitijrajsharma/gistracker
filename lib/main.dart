@@ -94,7 +94,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   bool _isLoading = true;
   bool _isGpxFileSaved = false;
   bool _isTrackingPaused = false;
-  int _distanceFilter = 2;
+  int _distanceFilter = 4;
 
   String _gpxFilename = '';
   List<LatLng> _locationPoints = [];
@@ -199,13 +199,12 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
       _isLoading = true;
       _recordedPositions.clear(); // Clear the previous recorded positions
     });
-    final LocationSettings locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      // distanceFilter: _distanceFilter,
-    );
+    // final LocationSettings locationSettings = LocationSettings(
+    //   accuracy: LocationAccuracy.high,
+    //   // distanceFilter: _distanceFilter,
+    // );
 
-    final positionStream =
-        Geolocator.getPositionStream(locationSettings: locationSettings);
+    final positionStream = Geolocator.getPositionStream();
 
     await for (Position position in positionStream) {
       if (mounted) {
@@ -375,15 +374,17 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                           SizedBox(height: 10),
                           TextField(
                             decoration: InputDecoration(
-                              labelText: 'Distance Tolerance (m)',
+                              labelText: 'Distance Filter (m)',
                               hintText: 'Enter distance threshold',
                               helperText:
-                                  "Before adding next point on your track how much distance threshold you want to apply ? By default : 2",
+                                  "Before adding next point on your track how much distance threshold you want to apply ?",
                             ),
                             keyboardType: TextInputType.number,
+                            controller: TextEditingController(
+                                text: _distanceFilter.toString()),
                             onChanged: (value) {
                               setState(() {
-                                _distanceFilter = int.tryParse(value) ?? 2;
+                                _distanceFilter = int.tryParse(value) ?? 4;
                               });
                             },
                           ),
@@ -428,6 +429,8 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                                       _gpxFilename = value;
                                     });
                                   },
+                                  controller:
+                                      TextEditingController(text: _gpxFilename),
                                   decoration: InputDecoration(
                                     labelText: 'File Name',
                                     hintText:
