@@ -175,7 +175,15 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
       _isLoading = true;
       _recordedPositions.clear(); // Clear the previous recorded positions
     });
+
     final positionStream = Geolocator.getPositionStream();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content:
+            Text('Tracking started. Tap "Finish Track" to save the GPX file.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
     await for (Position position in positionStream) {
       if (mounted) {
         setState(() {
@@ -220,12 +228,10 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
 
   Future<void> _writeGpxFile(List<Position> positions) async {
     final directory = await getAppDirectory();
-    print(directory);
     final now = DateTime.now();
     final formatter = DateFormat('yyyy-MM-dd_HH-mm-ss');
     final formattedDateTime = formatter.format(now);
     final filePath = '${directory}/track_$formattedDateTime.gpx';
-
     final builder = xml.XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8" standalone="no"');
     builder.element('gpx', namespaces: {
@@ -251,7 +257,12 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
 
     final file = File(filePath);
     await file.writeAsString((xmlDoc.toXmlString()));
-    print("Written GPX to $filePath");
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('GPX file saved successfully at $filePath'),
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
 
   void _updateLocationInfo({bool navigate = false}) {

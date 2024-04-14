@@ -53,10 +53,10 @@
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app requires access to your location.</string>
 
-	<key>NSFileProviderDomainUsageDescription</key>
-	<string>Access to write gpx files</string>
-	<key>NSExternalStorageUsageDescription</key>
-	<string>Need external storage to write gpx file</string>
+    <key>UIFileSharingEnabled</key>
+    <string>This app requires access to your file storage to write gpx files.</string>
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <string>This app requires access to your file storage to write gpx files.</string>
 
 
 </dict>
