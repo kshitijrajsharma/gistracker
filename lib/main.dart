@@ -7,7 +7,7 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:xml/xml.dart' as xml;
+import 'package:gpx/gpx.dart';
 import 'package:intl/intl.dart';
 
 Future<void> main() async {
@@ -91,6 +91,8 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   bool _isTracking = false;
   bool _isLoading = true;
   bool _isGpxFileSaved = false;
+  bool _isTrackingPaused = false;
+  String _gpxFilename = '';
   List<LatLng> _locationPoints = [];
   List<Position> _recordedPositions = [];
 
@@ -154,7 +156,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   Future<void> _getCurrentLocation() async {
     try {
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
+        desiredAccuracy: LocationAccuracy.high,
       );
       setState(() {
         _currentPosition = position;
@@ -170,7 +172,24 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
     }
   }
 
-  Future<void> _startTracking() async {
+  Future<void> _resumeTracking() async {
+    setState(() {
+      _isTrackingPaused = false;
+      _isTracking = true;
+    });
+    await _startTracking(setFilename: false);
+  }
+
+  Future<void> _startTracking({bool setFilename = true}) async {
+    if (setFilename) {
+      final now = DateTime.now();
+      final formatter = DateFormat('yyyy-MM-dd_HH-mm-ss');
+      final formattedDateTime = formatter.format(now);
+      setState(() {
+        _gpxFilename = 'track_$formattedDateTime';
+      });
+    }
+
     setState(() {
       _isTracking = true;
       _isLoading = true;
@@ -178,13 +197,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
     });
 
     final positionStream = Geolocator.getPositionStream();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content:
-            Text('Tracking started. Tap "Finish Track" to save the GPX file.'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+
     await for (Position position in positionStream) {
       if (mounted) {
         setState(() {
@@ -197,16 +210,30 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
         });
       }
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Tracking initiated. Tap "Finish Track" to save the GPX file.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
 
   Future<void> _saveGpxFile() async {
     print("Saving gpx file");
     await _writeGpxFile(_recordedPositions);
-  }
-
-  void _stopTracking() {
     setState(() {
       _isTracking = false;
+      _isTrackingPaused = false;
+      _recordedPositions.clear();
+      _locationPoints.clear();
+    });
+  }
+
+  void _pauseTracking() {
+    setState(() {
+      _isTracking = false;
+      _isTrackingPaused = true;
     });
     // _saveGpxFile();
   }
@@ -229,41 +256,48 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
 
   Future<void> _writeGpxFile(List<Position> positions) async {
     final directory = await getAppDirectory();
-    final now = DateTime.now();
-    final formatter = DateFormat('yyyy-MM-dd_HH-mm-ss');
-    final formattedDateTime = formatter.format(now);
-    final filePath = '${directory}/track_$formattedDateTime.gpx';
-    final builder = xml.XmlBuilder();
-    builder.processing('xml', 'version="1.0" encoding="UTF-8" standalone="no"');
-    builder.element('gpx', namespaces: {
-      '': 'http://www.topografix.com/GPX/1/1',
-    }, attributes: {
-      'creator': 'GIS Tracker',
-      'version': '1.1',
-    }, nest: () {
-      builder.element('trk', nest: () {
-        builder.element('trkseg', nest: () {
-          for (var position in positions) {
-            builder.element('trkpt', nest: () {
-              builder.element('lat', nest: position.latitude.toString());
-              builder.element('lon', nest: position.longitude.toString());
-              builder.element('ele', nest: position.altitude.toString());
-            });
-          }
-        });
-      });
-    });
+    final gpxFilePath = '${directory}/${_gpxFilename}.gpx';
+    final kmlFilePath = '${directory}/${_gpxFilename}.kml';
 
-    final xmlDoc = builder.buildDocument();
+    final gpx = Gpx();
+    gpx.version = '1.1';
+    gpx.creator = 'GIS Tracker';
+    gpx.metadata = Metadata();
+    gpx.metadata?.name = 'Location Track';
+    gpx.metadata?.desc = 'Track of user location';
+    gpx.metadata?.time = DateTime.now();
 
-    final file = File(filePath);
-    await file.writeAsString((xmlDoc.toXmlString()));
+    final trkpt = Trk();
+    final trkSeg = Trkseg();
+    for (final position in positions) {
+      trkSeg.trkpts.add(
+        Wpt(
+          lat: position.latitude,
+          lon: position.longitude,
+          ele: position.altitude,
+        ),
+      );
+    }
+    trkpt.trksegs.add(trkSeg);
+    gpx.trks.add(trkpt);
+
+    final gpxString = GpxWriter().asString(gpx, pretty: true);
+    final kmlString = KmlWriter(altitudeMode: AltitudeMode.clampToGround)
+        .asString(gpx, pretty: true);
+
+    final gpxFile = File(gpxFilePath);
+    final kmlFile = File(kmlFilePath);
+
+    await gpxFile.writeAsString(gpxString);
+    await kmlFile.writeAsString(kmlString);
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('GPX file saved successfully at $filePath'),
+        content: Text('GPX and KML files saved successfully'),
         duration: Duration(seconds: 3),
       ),
     );
+
     setState(() {
       _isGpxFileSaved = true;
     });
@@ -292,56 +326,94 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Location Tracker'),
+        title: Text('GIS Tracker'),
       ),
       body: Column(
         children: [
           Expanded(
-            child: _isLoading
-                ? CircularProgressIndicator()
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: _requestPermissionAndGetLocation,
-                        child: Text('Request Location'),
-                      ),
-                      SizedBox(height: 20),
-                      Text(_locationInfo),
-                      SizedBox(height: 20),
-                      if (_isTracking)
+            child: SingleChildScrollView(
+              child: _isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         ElevatedButton(
-                          onPressed: _stopTracking,
-                          child: Text('Stop Tracking'),
+                          onPressed: _requestPermissionAndGetLocation,
+                          child: Text('Request Location'),
                         ),
-                      if (!_isTracking && !_isGpxFileSaved)
-                        ElevatedButton(
-                          onPressed: _startTracking,
-                          child: Text('Start Tracking'),
+                        SizedBox(height: 5),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Text(
+                            _locationInfo,
+                            textAlign: TextAlign.center,
+                          ),
                         ),
-                      if (!_isTracking && _isGpxFileSaved)
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _isGpxFileSaved = false;
-                              _recordedPositions.clear();
-                              _locationPoints.clear();
-                            });
-                            _startTracking();
-                          },
-                          child: Text('Start New Track'),
-                        ),
-                      if (_isTracking && !_isGpxFileSaved)
-                        ElevatedButton(
-                          onPressed: _saveGpxFile,
-                          child: Text('Finish Track'),
-                        ),
-                      if (_isTracking)
-                        Text('Recorded Points: ${_recordedPositions.length}'),
-                    ],
-                  ),
+                        SizedBox(height: 5),
+                        if (_isTracking)
+                          ElevatedButton(
+                            onPressed: _pauseTracking,
+                            child: Text('Pause Tracking'),
+                          ),
+                        if (!_isTracking &&
+                            !_isGpxFileSaved &&
+                            !_isTrackingPaused)
+                          ElevatedButton(
+                            onPressed: _startTracking,
+                            child: Text('Start Tracking'),
+                          ),
+                        if (!_isTracking && _isGpxFileSaved)
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _isGpxFileSaved = false;
+                                _recordedPositions.clear();
+                                _locationPoints.clear();
+                              });
+                              _startTracking();
+                            },
+                            child: Text('Start New Track'),
+                          ),
+                        if (!_isTracking && _isTrackingPaused)
+                          ElevatedButton(
+                            onPressed: _resumeTracking,
+                            child: Text('Resume Tracking'),
+                          ),
+                        if (_isTracking && !_isGpxFileSaved)
+                          Column(
+                            children: [
+                              SizedBox(height: 5),
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20.0),
+                                  child: TextField(
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _gpxFilename = value;
+                                      });
+                                    },
+                                    controller: TextEditingController(
+                                        text: _gpxFilename),
+                                    decoration: InputDecoration(
+                                      labelText: 'File Name',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              ElevatedButton(
+                                onPressed: _saveGpxFile,
+                                child: Text('Finish Track'),
+                              ),
+                            ],
+                          ),
+                        if (_isTracking && !_isGpxFileSaved)
+                          Text('Recorded Points: ${_recordedPositions.length}'),
+                      ],
+                    ),
+            ),
           ),
-          SizedBox(height: 10),
           Expanded(
             child: FlutterMap(
               mapController: _mapController,
@@ -350,7 +422,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                     ? LatLng(
                         _currentPosition!.latitude, _currentPosition!.longitude)
                     : LatLng(0, 0),
-                initialZoom: 19.0,
+                initialZoom: 18.0,
               ),
               children: [
                 TileLayer(
