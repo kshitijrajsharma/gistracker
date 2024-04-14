@@ -95,6 +95,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   bool _isGpxFileSaved = false;
   bool _isTrackingPaused = false;
   int _distanceFilter = 2;
+
   String _gpxFilename = '';
   List<LatLng> _locationPoints = [];
   List<Position> _recordedPositions = [];
@@ -198,15 +199,19 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
       _isLoading = true;
       _recordedPositions.clear(); // Clear the previous recorded positions
     });
+    final LocationSettings locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      // distanceFilter: _distanceFilter,
+    );
 
-    final positionStream = Geolocator.getPositionStream();
+    final positionStream =
+        Geolocator.getPositionStream(locationSettings: locationSettings);
 
     await for (Position position in positionStream) {
       if (mounted) {
         setState(() {
           _currentPosition = position;
-          _updateLocationInfo();
-          _isLoading = false;
+          bool isIndistance = false;
           if (_isTracking) {
             if (_recordedPositions.isNotEmpty) {
               double lastLat = _recordedPositions.last.latitude;
@@ -216,12 +221,15 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                   position.latitude, position.longitude, lastLat, lastLng);
 
               if (distance > _distanceFilter) {
+                isIndistance = true;
                 _recordedPositions.add(position);
               }
             } else {
               _recordedPositions.add(position);
             }
           }
+          _updateLocationInfo(isIndistance: isIndistance);
+          _isLoading = false;
         });
       }
     }
@@ -318,7 +326,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
     });
   }
 
-  void _updateLocationInfo({bool navigate = false}) {
+  void _updateLocationInfo({bool navigate = false, bool isIndistance = false}) {
     if (_currentPosition == null) {
       _locationInfo = 'Location information will be displayed here.';
     } else {
@@ -329,7 +337,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
         if (navigate) {
           _mapController.move(newPoint, 20.0);
         }
-        if (_isTracking) {
+        if (_isTracking && isIndistance) {
           _locationPoints.add(newPoint);
         }
       }
@@ -346,118 +354,103 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
       body: Column(
         children: [
           Expanded(
+            flex: 1,
             child: SingleChildScrollView(
-              child: _isLoading
-                  ? Center(child: CircularProgressIndicator())
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(height: 5),
-                        ElevatedButton(
-                          onPressed: _requestPermissionAndGetLocation,
-                          child: Text('Request Location'),
-                        ),
-                        SizedBox(height: 5),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: _isLoading
+                    ? Center(child: CircularProgressIndicator())
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ElevatedButton(
+                            onPressed: _requestPermissionAndGetLocation,
+                            child: Text('Request Location'),
+                          ),
+                          SizedBox(height: 10),
+                          Text(
                             _locationInfo,
                             textAlign: TextAlign.center,
                           ),
-                        ),
-                        Container(
-                          alignment: Alignment.center,
-                          width: MediaQuery.of(context).size.width * 0.2,
-                          child: TextField(
+                          SizedBox(height: 10),
+                          TextField(
                             decoration: InputDecoration(
                               labelText: 'Distance Tolerance (m)',
+                              hintText: 'Enter distance threshold',
+                              helperText:
+                                  "Before adding next point on your track how much distance threshold you want to apply ? By default : 2",
                             ),
-                            textAlign: TextAlign.left,
-                            controller: TextEditingController(
-                                text: _distanceFilter.toString()),
                             keyboardType: TextInputType.number,
                             onChanged: (value) {
                               setState(() {
-                                _distanceFilter = int.parse(value);
+                                _distanceFilter = int.tryParse(value) ?? 2;
                               });
                             },
                           ),
-                        ),
-                        SizedBox(height: 5),
-                        if (_isTracking)
-                          ElevatedButton(
-                            onPressed: _pauseTracking,
-                            child: Text('Pause Tracking'),
-                          ),
-                        if (!_isTracking &&
-                            !_isGpxFileSaved &&
-                            !_isTrackingPaused)
-                          ElevatedButton(
-                            onPressed: _startTracking,
-                            child: Text('Start Tracking'),
-                          ),
-                        SizedBox(height: 5),
-                        if (!_isTracking && _isGpxFileSaved)
-                          ElevatedButton(
-                            onPressed: () {
-                              setState(() {
-                                _isGpxFileSaved = false;
-                                _recordedPositions.clear();
-                                _locationPoints.clear();
-                              });
-                              _startTracking();
-                            },
-                            child: Text('Start New Track'),
-                          ),
-                        if (!_isTracking && _isTrackingPaused)
-                          ElevatedButton(
-                            onPressed: _resumeTracking,
-                            child: Text('Resume Tracking'),
-                          ),
-                        if (_isTracking && !_isGpxFileSaved)
-                          Column(
-                            children: [
-                              SizedBox(height: 5),
-                              Container(
-                                alignment: Alignment.center,
-                                width: MediaQuery.of(context).size.width * 0.35,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20.0),
-                                  child: TextFormField(
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _gpxFilename = value;
-                                      });
-                                    },
-                                    controller: TextEditingController(
-                                      text: _gpxFilename,
-                                    ),
-                                    decoration: InputDecoration(
-                                      labelText: 'File Name',
-                                    ),
-                                    textAlign: TextAlign.left,
+                          SizedBox(height: 10),
+                          if (_isTracking)
+                            ElevatedButton(
+                              onPressed: _pauseTracking,
+                              child: Text('Pause Tracking'),
+                            ),
+                          if (!_isTracking &&
+                              !_isGpxFileSaved &&
+                              !_isTrackingPaused)
+                            ElevatedButton(
+                              onPressed: _startTracking,
+                              child: Text('Start Tracking'),
+                            ),
+                          SizedBox(height: 10),
+                          if (!_isTracking && _isGpxFileSaved)
+                            ElevatedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isGpxFileSaved = false;
+                                  _recordedPositions.clear();
+                                  _locationPoints.clear();
+                                });
+                                _startTracking();
+                              },
+                              child: Text('Start New Track'),
+                            ),
+                          if (!_isTracking && _isTrackingPaused)
+                            ElevatedButton(
+                              onPressed: _resumeTracking,
+                              child: Text('Resume Tracking'),
+                            ),
+                          if (_isTracking && !_isGpxFileSaved)
+                            Column(
+                              children: [
+                                SizedBox(height: 10),
+                                TextFormField(
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _gpxFilename = value;
+                                    });
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText: 'File Name',
+                                    hintText:
+                                        'Enter file name for your track , By default : Timestamp',
                                   ),
                                 ),
-                              ),
-                              SizedBox(height: 5),
-                              Container(
-                                alignment: Alignment.center,
-                                width: MediaQuery.of(context).size.width * 0.5,
-                                child: ElevatedButton(
+                                SizedBox(height: 10),
+                                ElevatedButton(
                                   onPressed: _saveGpxFile,
                                   child: Text('Finish Track'),
                                 ),
-                              ),
-                            ],
-                          ),
-                        if (_isTracking && !_isGpxFileSaved)
-                          Text('Recorded Points: ${_recordedPositions.length}'),
-                      ],
-                    ),
+                              ],
+                            ),
+                          if (_isTracking && !_isGpxFileSaved)
+                            Text(
+                                'Track - Waypoints : ${_recordedPositions.length}'),
+                        ],
+                      ),
+              ),
             ),
           ),
           Expanded(
+            flex: 2,
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
