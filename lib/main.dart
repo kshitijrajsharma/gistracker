@@ -51,7 +51,7 @@ String _convertToDMS(double coordinate, String type) {
 
 String _getHeadingDirection(double heading) {
   // Convert heading angle to cardinal direction
-  if (heading == null || heading.isNaN) return "Unknown";
+  if (heading == null || heading.isNaN) return "N/A";
   List<String> directions = [
     "North",
     "North East",
@@ -62,8 +62,12 @@ String _getHeadingDirection(double heading) {
     "West",
     "North West"
   ];
-  int index = ((heading / 45) % 8).round();
-  return directions[index];
+  if (heading > 0) {
+    int index = ((heading / 45) % 8).round();
+    return directions[index];
+  } else {
+    return "N/A";
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -187,6 +191,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   }
 
   Future<void> _saveGpxFile() async {
+    print("Saving gpx file");
     await _writeGpxFile(_recordedPositions);
   }
 
@@ -215,6 +220,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
 
   Future<void> _writeGpxFile(List<Position> positions) async {
     final directory = await getAppDirectory();
+    print(directory);
     final now = DateTime.now();
     final formatter = DateFormat('yyyy-MM-dd_HH-mm-ss');
     final formattedDateTime = formatter.format(now);
@@ -245,6 +251,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
 
     final file = File(filePath);
     await file.writeAsString((xmlDoc.toXmlString()));
+    print("Written GPX to $filePath");
   }
 
   void _updateLocationInfo({bool navigate = false}) {
