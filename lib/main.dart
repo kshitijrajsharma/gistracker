@@ -77,17 +77,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Location Tracker',
-      home: LocationTrackerScreen(),
+      home: GISTrackerScreen(),
     );
   }
 }
 
-class LocationTrackerScreen extends StatefulWidget {
+class GISTrackerScreen extends StatefulWidget {
   @override
-  _LocationTrackerScreenState createState() => _LocationTrackerScreenState();
+  _GISTrackerScreenState createState() => _GISTrackerScreenState();
 }
 
-class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
+class _GISTrackerScreenState extends State<GISTrackerScreen> {
   Position? _currentPosition;
   String _locationInfo = 'Loading location...';
   bool _isTracking = false;
