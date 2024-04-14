@@ -87,6 +87,14 @@ class GISTrackerScreen extends StatefulWidget {
   _GISTrackerScreenState createState() => _GISTrackerScreenState();
 }
 
+class PositionedPoint {
+  final Position position;
+  final Map<String, String> properties;
+
+  PositionedPoint(this.position, {Map<String, String>? properties})
+      : properties = properties ?? {};
+}
+
 class _GISTrackerScreenState extends State<GISTrackerScreen> {
   Position? _currentPosition;
   String _locationInfo = 'Loading location...';
@@ -98,7 +106,7 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
 
   String _gpxFilename = '';
   List<LatLng> _locationPoints = [];
-  List<Position> _recordedPositions = [];
+  List<PositionedPoint> _recordedPositions = [];
 
   @override
   void initState() {
@@ -121,6 +129,29 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
     } catch (e) {
       print('Error getting last known location: $e');
       _requestPermissionAndGetLocation();
+    }
+  }
+
+  Future<void> _requestCustomPointLocation() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      _savePointProperties(PositionedPoint(position));
+      setState(() {
+        // _currentPosition = position;
+        // _updateLocationInfo(navigate: true);
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error getting current location: $e');
+      setState(() {
+        // _locationInfo = 'Error getting location';
+        _isLoading = false;
+      });
     }
   }
 
@@ -216,18 +247,18 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
           bool isIndistance = false;
           if (_isTracking) {
             if (_recordedPositions.isNotEmpty) {
-              double lastLat = _recordedPositions.last.latitude;
-              double lastLng = _recordedPositions.last.longitude;
+              double lastLat = _recordedPositions.last.position.latitude;
+              double lastLng = _recordedPositions.last.position.longitude;
 
               double distance = Geolocator.distanceBetween(
                   position.latitude, position.longitude, lastLat, lastLng);
 
               if (distance > _distanceFilter) {
                 isIndistance = true;
-                _recordedPositions.add(position);
+                _recordedPositions.add(PositionedPoint(position));
               }
             } else {
-              _recordedPositions.add(position);
+              _recordedPositions.add(PositionedPoint(position));
             }
           }
           _updateLocationInfo(isIndistance: isIndistance);
@@ -263,6 +294,78 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
     // _saveGpxFile();
   }
 
+  Future<void> _savePointProperties(PositionedPoint positionedPoint) async {
+    String? key;
+    String? value;
+
+    key = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Enter Property Key'),
+          content: TextField(
+            onChanged: (value) => key = value,
+            decoration: InputDecoration(
+              hintText: 'Enter Property Key',
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, key);
+              },
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (key != null) {
+      value = await showDialog<String>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Enter Property Value'),
+            content: TextField(
+              onChanged: (value) => value = value,
+              decoration: InputDecoration(
+                hintText: 'Enter Property Value',
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context, value);
+                },
+                child: Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (value != null) {
+        setState(() {
+          // Add properties to the PositionedPoint
+          positionedPoint.properties[key!] = value!;
+        });
+      }
+    }
+  }
+
   Future<String> getAppDirectory() async {
     // Get the home directory
     final String homeDirectory =
@@ -279,7 +382,7 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
     return appDirectoryPath;
   }
 
-  Future<void> _writeGpxFile(List<Position> positions) async {
+  Future<void> _writeGpxFile(List<PositionedPoint> positions) async {
     final directory = await getAppDirectory();
     final gpxFilePath = '${directory}/${_gpxFilename}.gpx';
     final kmlFilePath = '${directory}/${_gpxFilename}.kml';
@@ -297,9 +400,9 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
     for (final position in positions) {
       trkSeg.trkpts.add(
         Wpt(
-          lat: position.latitude,
-          lon: position.longitude,
-          ele: position.altitude,
+          lat: position.position.latitude,
+          lon: position.position.longitude,
+          ele: position.position.altitude,
         ),
       );
     }
@@ -448,6 +551,11 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
                             onPressed: _saveGpxFile,
                             child: Text('Finish Track'),
                           ),
+                          if (_isTracking)
+                            ElevatedButton(
+                              onPressed: _requestCustomPointLocation,
+                              child: Text('Save this point'),
+                            ),
                         ],
                       ),
                     if (_isTracking && !_isGpxFileSaved)
