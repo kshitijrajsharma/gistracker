@@ -125,6 +125,9 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
   }
 
   Future<void> _requestPermissionAndGetLocation() async {
+    setState(() {
+      _isLoading = true;
+    });
     bool serviceEnabled;
     LocationPermission permission;
 
@@ -344,6 +347,20 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
   }
 
   MapController _mapController = MapController();
+
+  Widget _buildLocationInfoWidget() {
+    if (_isLoading) {
+      return Center(
+        child: CircularProgressIndicator(),
+      );
+    } else {
+      return Text(
+        _locationInfo,
+        textAlign: TextAlign.center,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -353,102 +370,90 @@ class _GISTrackerScreenState extends State<GISTrackerScreen> {
       body: Column(
         children: [
           Expanded(
-            flex: 1,
+            flex: 2,
             child: SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: _isLoading
-                    ? Center(child: CircularProgressIndicator())
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _requestPermissionAndGetLocation,
+                      child: Text('Request Location'),
+                    ),
+                    SizedBox(height: 10),
+                    _buildLocationInfoWidget(),
+                    SizedBox(height: 10),
+                    TextField(
+                      decoration: InputDecoration(
+                        labelText: 'Distance Filter (m) : $_distanceFilter',
+                        hintText: 'Enter distance threshold',
+                        helperText:
+                            "Before adding next point on your track how much distance threshold you want to apply ?",
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) {
+                        setState(() {
+                          _distanceFilter = int.tryParse(value) ?? 4;
+                        });
+                      },
+                    ),
+                    SizedBox(height: 10),
+                    if (_isTracking)
+                      ElevatedButton(
+                        onPressed: _pauseTracking,
+                        child: Text('Pause Tracking'),
+                      ),
+                    if (!_isTracking && !_isGpxFileSaved && !_isTrackingPaused)
+                      ElevatedButton(
+                        onPressed: _startTracking,
+                        child: Text('Start Tracking'),
+                      ),
+                    SizedBox(height: 10),
+                    if (!_isTracking && _isGpxFileSaved)
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _isGpxFileSaved = false;
+                            _recordedPositions.clear();
+                            _locationPoints.clear();
+                          });
+                          _startTracking();
+                        },
+                        child: Text('Start New Track'),
+                      ),
+                    if (!_isTracking && _isTrackingPaused)
+                      ElevatedButton(
+                        onPressed: _resumeTracking,
+                        child: Text('Resume Tracking'),
+                      ),
+                    if (_isTracking && !_isGpxFileSaved)
+                      Column(
                         children: [
-                          ElevatedButton(
-                            onPressed: _requestPermissionAndGetLocation,
-                            child: Text('Request Location'),
-                          ),
                           SizedBox(height: 10),
-                          Text(
-                            _locationInfo,
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: 10),
-                          TextField(
-                            decoration: InputDecoration(
-                              labelText: 'Distance Filter (m)',
-                              hintText: 'Enter distance threshold',
-                              helperText:
-                                  "Before adding next point on your track how much distance threshold you want to apply ?",
-                            ),
-                            keyboardType: TextInputType.number,
-                            controller: TextEditingController(
-                                text: _distanceFilter.toString()),
+                          TextFormField(
                             onChanged: (value) {
                               setState(() {
-                                _distanceFilter = int.tryParse(value) ?? 4;
+                                _gpxFilename = value;
                               });
                             },
+                            decoration: InputDecoration(
+                                labelText: 'Name : $_gpxFilename',
+                                hintText:
+                                    'Enter file name for your track , By default : Timestamp',
+                                helperText: "Enter your track name"),
                           ),
                           SizedBox(height: 10),
-                          if (_isTracking)
-                            ElevatedButton(
-                              onPressed: _pauseTracking,
-                              child: Text('Pause Tracking'),
-                            ),
-                          if (!_isTracking &&
-                              !_isGpxFileSaved &&
-                              !_isTrackingPaused)
-                            ElevatedButton(
-                              onPressed: _startTracking,
-                              child: Text('Start Tracking'),
-                            ),
-                          SizedBox(height: 10),
-                          if (!_isTracking && _isGpxFileSaved)
-                            ElevatedButton(
-                              onPressed: () {
-                                setState(() {
-                                  _isGpxFileSaved = false;
-                                  _recordedPositions.clear();
-                                  _locationPoints.clear();
-                                });
-                                _startTracking();
-                              },
-                              child: Text('Start New Track'),
-                            ),
-                          if (!_isTracking && _isTrackingPaused)
-                            ElevatedButton(
-                              onPressed: _resumeTracking,
-                              child: Text('Resume Tracking'),
-                            ),
-                          if (_isTracking && !_isGpxFileSaved)
-                            Column(
-                              children: [
-                                SizedBox(height: 10),
-                                TextFormField(
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _gpxFilename = value;
-                                    });
-                                  },
-                                  controller:
-                                      TextEditingController(text: _gpxFilename),
-                                  decoration: InputDecoration(
-                                    labelText: 'File Name',
-                                    hintText:
-                                        'Enter file name for your track , By default : Timestamp',
-                                  ),
-                                ),
-                                SizedBox(height: 10),
-                                ElevatedButton(
-                                  onPressed: _saveGpxFile,
-                                  child: Text('Finish Track'),
-                                ),
-                              ],
-                            ),
-                          if (_isTracking && !_isGpxFileSaved)
-                            Text(
-                                'Track - Waypoints : ${_recordedPositions.length}'),
+                          ElevatedButton(
+                            onPressed: _saveGpxFile,
+                            child: Text('Finish Track'),
+                          ),
                         ],
                       ),
+                    if (_isTracking && !_isGpxFileSaved)
+                      Text('Track - Waypoints : ${_recordedPositions.length}'),
+                  ],
+                ),
               ),
             ),
           ),
