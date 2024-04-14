@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -92,6 +94,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   bool _isLoading = true;
   bool _isGpxFileSaved = false;
   bool _isTrackingPaused = false;
+  int _distanceFilter = 2;
   String _gpxFilename = '';
   List<LatLng> _locationPoints = [];
   List<Position> _recordedPositions = [];
@@ -205,7 +208,19 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
           _updateLocationInfo();
           _isLoading = false;
           if (_isTracking) {
-            _recordedPositions.add(position);
+            if (_recordedPositions.isNotEmpty) {
+              double lastLat = _recordedPositions.last.latitude;
+              double lastLng = _recordedPositions.last.longitude;
+
+              double distance = Geolocator.distanceBetween(
+                  position.latitude, position.longitude, lastLat, lastLng);
+
+              if (distance > _distanceFilter) {
+                _recordedPositions.add(position);
+              }
+            } else {
+              _recordedPositions.add(position);
+            }
           }
         });
       }
@@ -337,6 +352,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        SizedBox(height: 5),
                         ElevatedButton(
                           onPressed: _requestPermissionAndGetLocation,
                           child: Text('Request Location'),
@@ -347,6 +363,24 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                           child: Text(
                             _locationInfo,
                             textAlign: TextAlign.center,
+                          ),
+                        ),
+                        Container(
+                          alignment: Alignment.center,
+                          width: MediaQuery.of(context).size.width * 0.2,
+                          child: TextField(
+                            decoration: InputDecoration(
+                              labelText: 'Distance Tolerance (m)',
+                            ),
+                            textAlign: TextAlign.left,
+                            controller: TextEditingController(
+                                text: _distanceFilter.toString()),
+                            keyboardType: TextInputType.number,
+                            onChanged: (value) {
+                              setState(() {
+                                _distanceFilter = int.parse(value);
+                              });
+                            },
                           ),
                         ),
                         SizedBox(height: 5),
@@ -362,6 +396,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                             onPressed: _startTracking,
                             child: Text('Start Tracking'),
                           ),
+                        SizedBox(height: 5),
                         if (!_isTracking && _isGpxFileSaved)
                           ElevatedButton(
                             onPressed: () {
@@ -383,28 +418,36 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                           Column(
                             children: [
                               SizedBox(height: 5),
-                              Center(
+                              Container(
+                                alignment: Alignment.center,
+                                width: MediaQuery.of(context).size.width * 0.35,
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 20.0),
-                                  child: TextField(
+                                  child: TextFormField(
                                     onChanged: (value) {
                                       setState(() {
                                         _gpxFilename = value;
                                       });
                                     },
                                     controller: TextEditingController(
-                                        text: _gpxFilename),
+                                      text: _gpxFilename,
+                                    ),
                                     decoration: InputDecoration(
                                       labelText: 'File Name',
                                     ),
+                                    textAlign: TextAlign.left,
                                   ),
                                 ),
                               ),
                               SizedBox(height: 5),
-                              ElevatedButton(
-                                onPressed: _saveGpxFile,
-                                child: Text('Finish Track'),
+                              Container(
+                                alignment: Alignment.center,
+                                width: MediaQuery.of(context).size.width * 0.5,
+                                child: ElevatedButton(
+                                  onPressed: _saveGpxFile,
+                                  child: Text('Finish Track'),
+                                ),
                               ),
                             ],
                           ),
