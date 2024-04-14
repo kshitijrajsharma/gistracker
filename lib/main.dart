@@ -90,6 +90,7 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
   String _locationInfo = 'Loading location...';
   bool _isTracking = false;
   bool _isLoading = true;
+  bool _isGpxFileSaved = false;
   List<LatLng> _locationPoints = [];
   List<Position> _recordedPositions = [];
 
@@ -263,6 +264,9 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
         duration: Duration(seconds: 3),
       ),
     );
+    setState(() {
+      _isGpxFileSaved = true;
+    });
   }
 
   void _updateLocationInfo({bool navigate = false}) {
@@ -310,20 +314,34 @@ class _LocationTrackerScreenState extends State<LocationTrackerScreen> {
                           onPressed: _stopTracking,
                           child: Text('Stop Tracking'),
                         ),
-                      if (!_isTracking)
+                      if (!_isTracking && !_isGpxFileSaved)
                         ElevatedButton(
                           onPressed: _startTracking,
                           child: Text('Start Tracking'),
                         ),
-                      if (_isTracking)
+                      if (!_isTracking && _isGpxFileSaved)
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _isGpxFileSaved = false;
+                              _recordedPositions.clear();
+                              _locationPoints.clear();
+                            });
+                            _startTracking();
+                          },
+                          child: Text('Start New Track'),
+                        ),
+                      if (_isTracking && !_isGpxFileSaved)
                         ElevatedButton(
                           onPressed: _saveGpxFile,
                           child: Text('Finish Track'),
                         ),
+                      if (_isTracking)
+                        Text('Recorded Points: ${_recordedPositions.length}'),
                     ],
                   ),
           ),
-          SizedBox(height: 20),
+          SizedBox(height: 10),
           Expanded(
             child: FlutterMap(
               mapController: _mapController,
